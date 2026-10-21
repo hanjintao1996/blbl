@@ -496,7 +496,7 @@
             app:tint="@color/player_button_tint"
             android:visibility="gone" />
 
-            <ImageButton
+            <blbl.cat3399.feature.player.HoldProgressImageButton
                 android:id="@+id/btn_coin"
                 android:layout_width="?attr/playerOsdButtonTargetSize"
                 android:layout_height="?attr/playerOsdButtonTargetSize"
@@ -510,7 +510,7 @@
             app:tint="@color/player_button_tint"
             android:visibility="gone" />
 
-            <ImageButton
+            <blbl.cat3399.feature.player.HoldProgressImageButton
                 android:id="@+id/btn_fav"
                 android:layout_width="?attr/playerOsdButtonTargetSize"
                 android:layout_height="?attr/playerOsdButtonTargetSize"

@@ -8,7 +8,7 @@ import android.view.MotionEvent
 import android.view.View
 
 class HoldToTriggerController(
-    private val view: View,
+    val view: View,
     private val progressHost: HoldProgressHost,
     private val durationMs: Long,
     private val onLongTrigger: () -> Unit,

@@ -233,7 +233,7 @@ internal fun PlayerActivity.resetPlaybackStateForNewMedia(
     favApplyJob = null
     tripleActionJob?.cancel()
     tripleActionJob = null
-    cancelLikeButtonHoldGesture(resetTriggered = true)
+    cancelActionButtonHoldGestures(resetTriggered = true)
     socialStateFetchJob?.cancel()
     socialStateFetchJob = null
     socialStateFetchToken++

@@ -188,7 +188,7 @@ class PlayerActivity : BaseActivity() {
     internal var tripleActionJob: Job? = null
     internal var socialStateFetchJob: kotlinx.coroutines.Job? = null
     internal var socialStateFetchToken: Int = 0
-    internal var likeButtonHoldController: HoldToTriggerController? = null
+    internal var actionHoldControllers: List<HoldToTriggerController> = emptyList()
     internal var touchController: PlayerTouchController? = null
     internal val osdFocusReturn = FocusReturn()
 
@@ -2072,7 +2072,7 @@ class PlayerActivity : BaseActivity() {
             binding.btnBack.performClick()
         }
 
-        installLikeButtonHoldInteraction()
+        installActionButtonHoldInteractions()
         binding.btnLike.setOnClickListener { onLikeButtonClicked() }
         binding.btnCoin.setOnClickListener { onCoinButtonClicked() }
         binding.btnFav.setOnClickListener { onFavButtonClicked() }

@@ -822,12 +822,16 @@ class AppPrefs(context: Context) {
             if (!prefs.contains(KEY_PLAYER_OSD_BUTTONS)) return DEFAULT_PLAYER_OSD_BUTTONS
             val stored = loadStringList(KEY_PLAYER_OSD_BUTTONS)
             val normalized = normalizePlayerOsdButtons(stored)
-            return migratePlayerOsdDetailButtonIfNeeded(normalized)
+            return migratePlayerOsdSocialButtonsIfNeeded(migratePlayerOsdDetailButtonIfNeeded(normalized))
         }
         set(value) {
             saveStringList(KEY_PLAYER_OSD_BUTTONS, normalizePlayerOsdButtons(value))
             // Once user manually configures OSD buttons, never force-enable new buttons again.
-            prefs.edit().putBoolean(KEY_PLAYER_OSD_BUTTONS_DETAIL_MIGRATED, true).apply()
+            prefs
+                .edit()
+                .putBoolean(KEY_PLAYER_OSD_BUTTONS_DETAIL_MIGRATED, true)
+                .putBoolean(KEY_PLAYER_OSD_BUTTONS_SOCIAL_MIGRATED, true)
+                .apply()
         }
 
     internal var playerCustomShortcuts: List<PlayerCustomShortcut>
@@ -982,6 +986,29 @@ class AppPrefs(context: Context) {
         val migrated = normalized + PLAYER_OSD_BTN_DETAIL
         saveStringList(KEY_PLAYER_OSD_BUTTONS, migrated)
         return migrated
+    }
+
+    private fun migratePlayerOsdSocialButtonsIfNeeded(normalized: List<String>): List<String> {
+        if (prefs.getBoolean(KEY_PLAYER_OSD_BUTTONS_SOCIAL_MIGRATED, false)) return normalized
+        // 点赞/投币/收藏已从「详情」页搬到一级 OSD 按钮栏：
+        // 对老用户做一次性补全，之后仍可在设置里自行关闭。
+        prefs.edit().putBoolean(KEY_PLAYER_OSD_BUTTONS_SOCIAL_MIGRATED, true).apply()
+
+        val socialKeys =
+            listOf(
+                PLAYER_OSD_BTN_LIKE,
+                PLAYER_OSD_BTN_COIN,
+                PLAYER_OSD_BTN_FAV,
+            )
+        val missing = socialKeys.filterNot { normalized.contains(it) }
+        if (missing.isEmpty()) return normalized
+
+        val merged = normalized.toMutableList()
+        val anchorIndex = merged.indexOf(PLAYER_OSD_BTN_UP)
+        val insertIndex = if (anchorIndex >= 0) anchorIndex + 1 else merged.size
+        merged.addAll(insertIndex, missing)
+        saveStringList(KEY_PLAYER_OSD_BUTTONS, merged)
+        return merged
     }
 
     private fun normalizePlayerOsdButtons(value: List<String>): List<String> {
@@ -1144,6 +1171,7 @@ class AppPrefs(context: Context) {
         private const val KEY_PLAYER_UP_QUICK_CARD_ENABLED = "player_up_quick_card_enabled"
         private const val KEY_PLAYER_OSD_BUTTONS = "player_osd_buttons"
         private const val KEY_PLAYER_OSD_BUTTONS_DETAIL_MIGRATED = "player_osd_buttons_detail_migrated"
+        private const val KEY_PLAYER_OSD_BUTTONS_SOCIAL_MIGRATED = "player_osd_buttons_social_migrated"
         private const val KEY_PLAYER_CUSTOM_SHORTCUTS = "player_custom_shortcuts"
         private const val KEY_GRID_SPAN = "grid_span"
         private const val KEY_DYNAMIC_GRID_SPAN = "dynamic_grid_span"
@@ -1313,6 +1341,9 @@ class AppPrefs(context: Context) {
                 PLAYER_OSD_BTN_DETAIL,
                 PLAYER_OSD_BTN_SPONSOR_SUBMIT,
                 PLAYER_OSD_BTN_UP,
+                PLAYER_OSD_BTN_LIKE,
+                PLAYER_OSD_BTN_COIN,
+                PLAYER_OSD_BTN_FAV,
                 PLAYER_OSD_BTN_LIST_PANEL,
                 PLAYER_OSD_BTN_ADVANCED,
                 PLAYER_OSD_BTN_CLOSE_PLAYER,
