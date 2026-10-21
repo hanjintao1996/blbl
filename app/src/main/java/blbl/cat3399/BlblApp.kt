@@ -2,6 +2,7 @@ package blbl.cat3399
 
 import android.app.Application
 import android.os.Build
+import blbl.cat3399.core.api.BlacklistCache
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.log.CrashTracker
 import blbl.cat3399.core.emote.ReplyEmotePanelRepository
@@ -33,6 +34,9 @@ class BlblApp : Application() {
         appScope.launch {
             runCatching { ReplyEmotePanelRepository.warmup(this@BlblApp) }
                 .onFailure { AppLog.w("BlblApp", "reply emote warmup failed", it) }
+        }
+        if (BiliClient.prefs.globalBlacklistEnabled) {
+            BlacklistCache.refresh()
         }
     }
 

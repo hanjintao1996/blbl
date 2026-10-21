@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import blbl.cat3399.R
 import blbl.cat3399.core.api.BiliApi
 import blbl.cat3399.core.api.BiliApiException
+import blbl.cat3399.core.api.BlacklistCache
 import blbl.cat3399.core.api.video.VideoCollectionKind
 import blbl.cat3399.core.api.video.VideoCollectionSection
 import blbl.cat3399.core.log.AppLog
@@ -69,7 +70,9 @@ class UpDetailActivity : BaseActivity() {
     private var currentTab: UpTab = UpTab.ARCHIVE
 
     private var isFollowed: Boolean = false
+    private var isBlocked: Boolean = false
     private var followActionInFlight: Boolean = false
+    private var blockActionInFlight: Boolean = false
     private var loadedInitialInfo: Boolean = false
     private var headerRequestToken: Int = 0
     private var appBarVerticalOffset: Int = 0
@@ -215,6 +218,15 @@ class UpDetailActivity : BaseActivity() {
         binding.btnFollow.setOnClickListener { onFollowClicked() }
         binding.btnFollow.isFocusableInTouchMode = true
         binding.btnFollow.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return@setOnKeyListener false
+            focusSelectedTab()
+            true
+        }
+
+        binding.btnBlock.setOnClickListener { onBlockClicked() }
+        binding.btnBlock.isFocusableInTouchMode = true
+        binding.btnBlock.setOnKeyListener { _, keyCode, event ->
             if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return@setOnKeyListener false
             focusSelectedTab()
@@ -609,7 +621,9 @@ class UpDetailActivity : BaseActivity() {
                 binding.tvSign.isVisible = !info.sign.isNullOrBlank()
                 blbl.cat3399.core.image.ImageLoader.loadInto(binding.ivAvatar, blbl.cat3399.core.image.ImageUrl.avatar(info.faceUrl))
                 isFollowed = info.isFollowed
+                isBlocked = BlacklistCache.isBlocked(mid)
                 updateFollowUi()
+                updateBlockUi()
             } else if (!loadedInitialInfo) {
                 binding.tvName.text = binding.tvName.text.takeIf { it.isNotBlank() } ?: "加载失败"
             }
@@ -954,7 +968,7 @@ class UpDetailActivity : BaseActivity() {
             try {
                 BiliApi.modifyRelation(fid = mid, act = if (wantFollow) 1 else 2, reSrc = 11)
                 isFollowed = wantFollow
-                AppToast.show(this@UpDetailActivity, if (wantFollow) "已关注" else "已取关")
+                AppToast.show(this@UpDetailActivity, if (wantFollow) "❤️" else "已取关")
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 AppLog.w("UpDetail", "modifyRelation failed mid=$mid wantFollow=$wantFollow", t)
@@ -998,6 +1012,78 @@ class UpDetailActivity : BaseActivity() {
             }
         binding.btnFollow.backgroundTintList = ColorStateList.valueOf(bg)
         binding.btnFollow.setTextColor(fg)
+    }
+
+    private fun onBlockClicked() {
+        if (!BiliClient.cookies.hasSessData()) {
+            startActivity(Intent(this, QrLoginActivity::class.java))
+            AppToast.show(this, "登录后才能拉黑")
+            return
+        }
+        if (blockActionInFlight) return
+        val selfMid = BiliClient.cookies.getCookieValue("DedeUserID")?.trim()?.toLongOrNull()
+        if (selfMid != null && selfMid == mid) return
+
+        val wantBlock = !isBlocked
+        blockActionInFlight = true
+        updateBlockUi()
+        lifecycleScope.launch {
+            try {
+                BiliApi.modifyRelation(fid = mid, act = if (wantBlock) 5 else 6, reSrc = 11)
+                isBlocked = wantBlock
+                if (wantBlock) {
+                    BlacklistCache.addBlock(mid)
+                    AppToast.show(this@UpDetailActivity, "🌶️")
+                    if (isFollowed) {
+                        isFollowed = false
+                        updateFollowUi()
+                    }
+                } else {
+                    BlacklistCache.removeBlock(mid)
+                    AppToast.show(this@UpDetailActivity, "已取消拉黑")
+                }
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                AppLog.w("UpDetail", "modifyRelation block failed mid=$mid wantBlock=$wantBlock", t)
+                val raw =
+                    (t as? BiliApiException)?.apiMessage?.takeIf { it.isNotBlank() }
+                        ?: t.message.orEmpty()
+                val msg =
+                    when (raw) {
+                        "missing_csrf" -> "登录态不完整，请重新登录"
+                        else -> raw
+                    }
+                AppToast.show(this@UpDetailActivity, if (msg.isBlank()) "操作失败" else msg)
+            } finally {
+                blockActionInFlight = false
+                updateBlockUi()
+            }
+        }
+    }
+
+    private fun updateBlockUi() {
+        val selfMid = BiliClient.cookies.getCookieValue("DedeUserID")?.trim()?.toLongOrNull()
+        val isSelf = selfMid != null && selfMid == mid
+        binding.btnBlock.isVisible = !isSelf
+        if (isSelf) return
+
+        binding.btnBlock.isEnabled = !blockActionInFlight
+        binding.btnBlock.text = if (isBlocked) "已拉黑" else "拉黑"
+
+        val bg =
+            if (isBlocked) {
+                ThemeColor.resolve(this, MaterialR.attr.colorError, R.color.blbl_surface)
+            } else {
+                ThemeColor.resolve(this, MaterialR.attr.colorSurface, R.color.blbl_surface)
+            }
+        val fg =
+            if (isBlocked) {
+                ThemeColor.resolve(this, MaterialR.attr.colorOnError, R.color.blbl_text)
+            } else {
+                ThemeColor.resolve(this, android.R.attr.textColorSecondary, R.color.blbl_text_secondary)
+            }
+        binding.btnBlock.backgroundTintList = ColorStateList.valueOf(bg)
+        binding.btnBlock.setTextColor(fg)
     }
 
     private fun focusGridAt(position: Int) {

@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.core.api.BiliApi
+import blbl.cat3399.core.api.BlacklistCache
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.VideoCard
 import blbl.cat3399.core.net.BiliClient
@@ -113,6 +114,7 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
         }
         binding.recycler.adapter = adapter
         binding.recycler.setHasFixedSize(true)
+        binding.recycler.setItemViewCacheSize(6)
         binding.recycler.layoutManager = GridLayoutManager(requireContext(), spanCountForWidth())
         (binding.recycler.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)?.supportsChangeAnimations = false
         binding.recycler.clearOnScrollListeners()
@@ -128,7 +130,7 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
                     val total = adapter.itemCount
                     if (total <= 0) return
 
-                    if (total - lastVisible - 1 <= 8) {
+                    if (total - lastVisible - 1 <= 20) {
                         AppLog.d("VideoGrid", "near end source=$source rid=$rid t=${SystemClock.uptimeMillis()}")
                         loadNextPage()
                     }
@@ -265,11 +267,12 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
                     )
 
                 val applied = result.appliedOrNull() ?: return@launch
-                applied.items.forEach { loadedStableKeys.add(it.stableKey()) }
+                val filteredItems = applied.items.filter { !BlacklistCache.isBlocked(it.ownerMid) }
+                filteredItems.forEach { loadedStableKeys.add(it.stableKey()) }
                 if (applied.isRefresh) {
-                    adapter.submit(applied.items)
-                } else if (applied.items.isNotEmpty()) {
-                    adapter.append(applied.items)
+                    adapter.submit(filteredItems)
+                } else if (filteredItems.isNotEmpty()) {
+                    adapter.append(filteredItems)
                 }
                 _binding?.let { b ->
                     b.recycler.postIfAlive(isAlive = { _binding === b && isResumed }) {
@@ -306,6 +309,16 @@ class VideoGridFragment : Fragment(), RefreshKeyHandler, TabSwitchFocusTarget {
                 context?.let { AppToast.show(it, "加载失败，可查看 Logcat(标签 BLBL)") }
             } finally {
                 if (isRefresh && paging.snapshot().generation == startGen) _binding?.swipeRefresh?.isRefreshing = false
+                // 加载完成后立即检查是否需要预取下一页
+                val lm = _binding?.recycler?.layoutManager as? GridLayoutManager
+                val s = paging.snapshot()
+                if (lm != null && !s.isLoading && !s.endReached) {
+                    val lastVisible = lm.findLastVisibleItemPosition()
+                    val total = adapter.itemCount
+                    if (total > 0 && total - lastVisible - 1 <= 20) {
+                        loadNextPage()
+                    }
+                }
                 AppLog.d(
                     "VideoGrid",
                     "loadNextPage end source=$source rid=$rid page=${paging.snapshot().nextKey.page} refresh=$isRefresh t=${SystemClock.uptimeMillis()}",

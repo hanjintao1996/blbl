@@ -663,6 +663,10 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_PLAYER_DEBUG, false)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_DEBUG, value).apply()
 
+    var globalBlacklistEnabled: Boolean
+        get() = prefs.getBoolean(KEY_GLOBAL_BLACKLIST_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_GLOBAL_BLACKLIST_ENABLED, value).apply()
+
     var playerDoubleBackToExit: Boolean
         get() = prefs.getBoolean(KEY_PLAYER_DOUBLE_BACK_TO_EXIT, true)
         set(value) = prefs.edit().putBoolean(KEY_PLAYER_DOUBLE_BACK_TO_EXIT, value).apply()
@@ -1126,6 +1130,7 @@ class AppPrefs(context: Context) {
         private const val KEY_MAIN_BACK_FOCUS_SCHEME = "main_back_focus_scheme"
         private const val KEY_VIDEO_CARD_LONG_PRESS_ACTION = "video_card_long_press_action"
         private const val KEY_PLAYER_DEBUG = "player_debug_enabled"
+        private const val KEY_GLOBAL_BLACKLIST_ENABLED = "global_blacklist_enabled"
         private const val KEY_PLAYER_DOUBLE_BACK_TO_EXIT = "player_double_back_on_ended"
         private const val KEY_PLAYER_DOWN_KEY_OSD_FOCUS_TARGET = "player_down_key_osd_focus_target"
         private const val KEY_PLAYER_TOGGLE_PLAY_STATE_SHOW_OSD = "player_toggle_play_state_show_osd"

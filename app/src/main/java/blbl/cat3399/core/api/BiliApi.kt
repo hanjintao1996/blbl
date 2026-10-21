@@ -2037,6 +2037,38 @@ object BiliApi {
         }
     }
 
+    data class BlacklistPage(val mids: List<Long>, val hasMore: Boolean)
+
+    suspend fun blacklistPage(pn: Int = 1, ps: Int = 50): BlacklistPage {
+        val url = BiliClient.withQuery(
+            "https://api.bilibili.com/x/relation/blacks",
+            mapOf(
+                "pn" to pn.coerceAtLeast(1).toString(),
+                "ps" to ps.coerceIn(1, 50).toString(),
+            ),
+        )
+        val json = BiliClient.getJson(
+            url,
+            headers = mapOf("Referer" to "https://www.bilibili.com/"),
+        )
+        val code = json.optInt("code", 0)
+        if (code != 0) {
+            val msg = json.optString("message", json.optString("msg", ""))
+            throw BiliApiException(apiCode = code, apiMessage = msg)
+        }
+        val data = json.optJSONObject("data") ?: org.json.JSONObject()
+        val list = data.optJSONArray("list") ?: org.json.JSONArray()
+        val total = data.optInt("total", 0)
+        val mids = ArrayList<Long>(list.length())
+        for (i in 0 until list.length()) {
+            val obj = list.optJSONObject(i) ?: continue
+            mids.add(obj.optLong("mid"))
+        }
+        val page = pn.coerceAtLeast(1)
+        val pageSize = ps.coerceIn(1, 50)
+        return BlacklistPage(mids = mids, hasMore = mids.isNotEmpty() && page * pageSize < total)
+    }
+
     private fun genPlayUrlSession(nowMs: Long = System.currentTimeMillis()): String? {
         val buvid3 = BiliClient.cookies.getCookieValue("buvid3")?.takeIf { it.isNotBlank() } ?: return null
         return md5Hex(buvid3 + nowMs.toString())

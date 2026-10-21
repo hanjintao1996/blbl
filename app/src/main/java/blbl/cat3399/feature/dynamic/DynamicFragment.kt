@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.core.api.BiliApi
+import blbl.cat3399.core.api.BlacklistCache
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.model.Following
 import blbl.cat3399.core.model.VideoCard
@@ -84,6 +85,13 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
     private val consumedRecentUpdateMids = HashSet<Long>()
     private val loadedFollowMids = HashSet<Long>()
     private var followingListController: DpadGridController? = null
+
+    // 热点预加载缓存
+    private var hotCache: MutableList<blbl.cat3399.core.model.VideoCard> = mutableListOf()
+    private var hotCacheOffset: String? = null
+    private var hotCacheEndReached: Boolean = false
+    private val hotCacheBvids = HashSet<String>()
+    private var hotPreloadJob: kotlinx.coroutines.Job? = null
 
     private var pendingFocusFirstFeedCardAfterRefresh: Boolean = false
 
@@ -186,6 +194,7 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
                 actionDelegate = actionController,
             )
         binding.recyclerDynamic.setHasFixedSize(true)
+        binding.recyclerDynamic.setItemViewCacheSize(6)
         binding.recyclerDynamic.layoutManager = GridLayoutManager(requireContext(), spanCountForWidth())
         binding.recyclerDynamic.adapter = videoAdapter
         (binding.recyclerDynamic.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)?.supportsChangeAnimations = false
@@ -266,8 +275,9 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
     }
 
     private fun buildFollowingUiList(): List<FollowingAdapter.FollowingUi> {
-        val items = ArrayList<FollowingAdapter.FollowingUi>(baseFollowings.size + 1)
+        val items = ArrayList<FollowingAdapter.FollowingUi>(baseFollowings.size + 2)
         items += FollowingAdapter.FollowingUi(FollowingAdapter.MID_ALL, "所有", null, isAll = true)
+        items += FollowingAdapter.FollowingUi(FollowingAdapter.MID_HOT, "热点", null, isHot = true)
         val orderedFollowings = orderedFollowings()
         for (following in orderedFollowings) {
             val mid = following.mid
@@ -336,8 +346,14 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
                 }
 
                 userMid = mid
-                resetAndLoadFollowings()
-                if (resetFeed) resetAndLoadFeed() else loadMoreFeed()
+                // 并行加载关注列表和 Feed，减少等待时间
+                val followingsJob = async { resetAndLoadFollowings() }
+                val feedJob = async {
+                    if (resetFeed) resetAndLoadFeed() else loadMoreFeed()
+                }
+                followingsJob.await()
+                feedJob.await()
+                preloadHotCache()
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 AppLog.e("Dynamic", "load failed", t)
@@ -443,6 +459,8 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         }
     }
 
+    private var pendingResetSubmit: Boolean = false
+
     private fun resetAndLoadFeed() {
         dynamicGridController?.clearPendingFocusAfterLoadMore()
         loadedStableKeys.clear()
@@ -451,9 +469,50 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
         endReached = false
         isLoadingMore = false
         requestToken++
-        videoAdapter.submit(emptyList())
+        pendingResetSubmit = true  // 延迟清空，等新数据到达后再 submit
         _binding?.swipeRefresh?.isRefreshing = true
         loadMoreFeed()
+    }
+
+    /** 首次加载时用 submit 替换旧数据（避免闪空），后续用 append 追加。 */
+    private fun VideoCardAdapter.appendOrSubmit(list: List<blbl.cat3399.core.model.VideoCard>) {
+        if (pendingResetSubmit) {
+            pendingResetSubmit = false
+            submit(list)
+        } else {
+            append(list)
+        }
+    }
+
+    private fun preloadHotCache() {
+        hotPreloadJob?.cancel()
+        hotCache.clear()
+        hotCacheBvids.clear()
+        hotCacheOffset = null
+        hotCacheEndReached = false
+        hotPreloadJob = viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                repeat(10) {
+                    val page = BiliApi.dynamicAllVideo(offset = hotCacheOffset)
+                    hotCacheOffset = page.nextOffset
+                    hotCacheEndReached = hotCacheOffset == null
+                    page.items.forEach { card ->
+                        if (hotCacheBvids.add(card.bvid)) {
+                            if ((card.view ?: 0) >= 100_000 || (card.danmaku ?: 0) >= 500) {
+                                if (!BlacklistCache.isBlocked(card.ownerMid)) {
+                                    hotCache.add(card)
+                                }
+                            }
+                        }
+                    }
+                    if (hotCacheEndReached || hotCache.size >= 24) return@repeat
+                }
+                AppLog.d("Dynamic", "hot preload done: ${hotCache.size} items cached")
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                AppLog.e("Dynamic", "hot preload failed", t)
+            }
+        }
     }
 
     private fun loadMoreFeed() {
@@ -472,15 +531,63 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
                     while (true) {
                         val page = BiliApi.dynamicAllVideo(offset = currentOffset)
                         if (token != requestToken) return@launch
-                        val visibleItems = VideoCardVisibilityFilter.filterVisibleFresh(page.items, loadedStableKeys)
+                        val visibleItems =
+                            VideoCardVisibilityFilter
+                                .filterVisibleFresh(page.items, loadedStableKeys)
+                                .filter { !BlacklistCache.isBlocked(it.ownerMid) }
                         nextOffset = page.nextOffset
                         endReached = nextOffset == null
                         if (visibleItems.isNotEmpty() || endReached || nextOffset == currentOffset || page.items.isEmpty()) {
                             visibleItems.forEach { loadedStableKeys.add(it.stableKey()) }
-                            videoAdapter.append(visibleItems)
+                            videoAdapter.appendOrSubmit(visibleItems)
                             break
                         }
                         currentOffset = nextOffset
+                    }
+                } else if (selectedMid == FollowingAdapter.MID_HOT) {
+                    // 立即消费已有预加载缓存，不等全部预加载完成
+                    if (hotCache.isEmpty() && hotPreloadJob?.isActive == true) {
+                        context?.let { AppToast.show(it, "热点加载中…") }
+                        // 缓存为空但预加载在跑：短暂等待，每200ms检查一次，最多等2秒
+                        var waited = 0
+                        while (hotCache.isEmpty() && hotPreloadJob?.isActive == true && waited < 2000) {
+                            kotlinx.coroutines.delay(200)
+                            waited += 200
+                        }
+                    }
+                    if (hotCache.isNotEmpty()) {
+                        val cached = hotCache.toList()
+                        hotCache.clear()
+                        // 预加载未结束时不覆盖 offset，让后续 loadMore 走网络兜底
+                        if (hotPreloadJob?.isActive != true) {
+                            nextOffset = hotCacheOffset
+                            endReached = hotCacheEndReached
+                        }
+                        val fresh = VideoCardVisibilityFilter.filterVisibleFresh(cached, loadedStableKeys)
+                        fresh.forEach { loadedStableKeys.add(it.stableKey()) }
+                        videoAdapter.appendOrSubmit(fresh)
+                    } else {
+                        if (videoAdapter.itemCount == 0) {
+                            context?.let { AppToast.show(it, "热点加载中…") }
+                        }
+                        val accumulated = mutableListOf<blbl.cat3399.core.model.VideoCard>()
+                        repeat(10) {
+                            val page = BiliApi.dynamicAllVideo(offset = nextOffset)
+                            if (token != requestToken) return@launch
+                            nextOffset = page.nextOffset
+                            endReached = nextOffset == null
+                            val fresh = VideoCardVisibilityFilter.filterVisibleFresh(page.items, loadedStableKeys)
+                            fresh.forEach { card ->
+                                loadedStableKeys.add(card.stableKey())
+                                if (!BlacklistCache.isBlocked(card.ownerMid) &&
+                                    ((card.view ?: 0) >= 100_000 || (card.danmaku ?: 0) >= 500)
+                                ) {
+                                    accumulated.add(card)
+                                }
+                            }
+                            if (endReached || accumulated.size >= 12) return@repeat
+                        }
+                        videoAdapter.appendOrSubmit(accumulated)
                     }
                 } else {
                     var targetPage = nextPage.coerceAtLeast(1)
@@ -493,12 +600,15 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
                             )
                         if (token != requestToken) return@launch
 
-                        val visibleItems = VideoCardVisibilityFilter.filterVisibleFresh(page.items, loadedStableKeys)
+                        val visibleItems =
+                            VideoCardVisibilityFilter
+                                .filterVisibleFresh(page.items, loadedStableKeys)
+                                .filter { !BlacklistCache.isBlocked(it.ownerMid) }
                         nextPage = targetPage + 1
                         endReached = !page.hasMore
                         if (visibleItems.isNotEmpty() || endReached || page.items.isEmpty()) {
                             visibleItems.forEach { loadedStableKeys.add(it.stableKey()) }
-                            videoAdapter.append(visibleItems)
+                            videoAdapter.appendOrSubmit(visibleItems)
                             break
                         }
                         targetPage = nextPage
@@ -528,6 +638,15 @@ class DynamicFragment : Fragment(), RefreshKeyHandler, BackPressHandler {
             } finally {
                 if (token == requestToken) _binding?.swipeRefresh?.isRefreshing = false
                 isLoadingMore = false
+                // 热点模式预加载：加载完后如果内容不多，提前拉取下一批
+                if (token == requestToken && selectedMid == FollowingAdapter.MID_HOT && !endReached) {
+                    val lm = _binding?.recyclerDynamic?.layoutManager as? GridLayoutManager
+                    val total = videoAdapter.itemCount
+                    val lastVisible = lm?.findLastVisibleItemPosition() ?: 0
+                    if (total - lastVisible - 1 <= 16) {
+                        loadMoreFeed()
+                    }
+                }
             }
         }
     }

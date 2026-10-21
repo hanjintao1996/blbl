@@ -20,6 +20,7 @@ class FollowingAdapter(
         val avatarUrl: String?,
         val showRecentUpdateDot: Boolean = false,
         val isAll: Boolean = false,
+        val isHot: Boolean = false,
     )
 
     private val items = ArrayList<FollowingUi>()
@@ -83,6 +84,12 @@ class FollowingAdapter(
                     android.content.res.ColorStateList.valueOf(
                         primaryText,
                     )
+            } else if (item.isHot) {
+                binding.ivAvatar.setImageResource(blbl.cat3399.R.drawable.ic_hot_fire)
+                binding.ivAvatar.imageTintList =
+                    android.content.res.ColorStateList.valueOf(
+                        primaryText,
+                    )
             } else {
                 binding.ivAvatar.imageTintList = null
                 ImageLoader.loadInto(binding.ivAvatar, ImageUrl.avatar(item.avatarUrl))
@@ -99,5 +106,6 @@ class FollowingAdapter(
 
     companion object {
         const val MID_ALL: Long = -1L
+        const val MID_HOT: Long = -2L
     }
 }

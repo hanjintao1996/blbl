@@ -37,6 +37,17 @@ android {
         }
     }
 
+    flavorDimensions += "variant"
+    productFlavors {
+        create("original") {
+            dimension = "variant"
+        }
+        create("tao") {
+            dimension = "variant"
+            applicationId = "blbl.cat3399.tao"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false

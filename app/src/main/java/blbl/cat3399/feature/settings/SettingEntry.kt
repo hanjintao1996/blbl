@@ -18,6 +18,7 @@ enum class SettingId(
     ClearCache("clear_cache"),
     ConfigTransfer("config_transfer"),
     ClearLogin("clear_login"),
+    GlobalBlacklistEnabled("global_blacklist_enabled"),
 
     // 页面设置
     StartupPage("startup_page"),

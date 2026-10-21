@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.BuildConfig
+import blbl.cat3399.core.api.BlacklistCache
 import blbl.cat3399.core.io.CreateDocumentRequest
 import blbl.cat3399.core.io.DocumentExporter
 import blbl.cat3399.core.log.AppLog
@@ -741,6 +742,19 @@ class SettingsInteractionHandler(
             SettingId.ClearCache -> showClearCacheDialog(state.currentSectionIndex, entry.id)
             SettingId.ConfigTransfer -> showConfigTransferDialog()
             SettingId.ClearLogin -> showClearLoginDialog(state.currentSectionIndex, entry.id)
+            SettingId.GlobalBlacklistEnabled -> {
+                prefs.globalBlacklistEnabled = !prefs.globalBlacklistEnabled
+                renderer.refreshSection(entry.id)
+                if (prefs.globalBlacklistEnabled) {
+                    AppToast.show(activity, "加载黑名单中…")
+                    activity.lifecycleScope.launch {
+                        BlacklistCache.refreshAndAwait()
+                        AppToast.show(activity, "全站拉黑：开（已加载）")
+                    }
+                } else {
+                    AppToast.show(activity, "全站拉黑：关")
+                }
+            }
             SettingId.ExportLogs -> {
                 val prepared = prepareLogsExport()
                 launchDocumentExport(

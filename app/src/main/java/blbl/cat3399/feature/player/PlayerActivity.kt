@@ -1667,8 +1667,17 @@ class PlayerActivity : BaseActivity() {
                     return true
                 }
                 if (osdMode == OsdMode.Hidden) {
+                    // 第一次按下：显示 OSD（与原来一致）
                     setControlsVisible(true)
                     focusDownKeyOsdTargetControl()
+                    return true
+                }
+                // 第二次按下（OSD 已显示）：打开推荐面板
+                if (currentBvid.isNotBlank()) {
+                    showListPanel(
+                        kind = PlayerVideoListKind.RECOMMEND,
+                        preferContentFocus = false,
+                    )
                     return true
                 }
             }

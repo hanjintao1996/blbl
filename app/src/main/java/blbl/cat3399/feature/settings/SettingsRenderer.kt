@@ -232,6 +232,7 @@ class SettingsRenderer(
                     SettingEntry(SettingId.ClearCache, "清理缓存", cacheSizeText(), null),
                     SettingEntry(SettingId.ConfigTransfer, "导出/入配置", "打开", null),
                     SettingEntry(SettingId.ClearLogin, "清除登录", loginStatusText(), null),
+                    SettingEntry(SettingId.GlobalBlacklistEnabled, "全站拉黑", if (prefs.globalBlacklistEnabled) "开" else "关", "屏蔽黑名单UP主在推荐/热点/动态中的视频"),
                 )
 
             "页面设置" ->

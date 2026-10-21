@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.MarginLayoutParams
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import blbl.cat3399.R
 import blbl.cat3399.core.image.ImageLoader
@@ -53,13 +54,33 @@ class VideoCardAdapter(
     }
 
     fun submit(list: List<VideoCard>) {
+        val oldList = items.toList()
+        val newList = list.toList()
         items.clear()
-        items.addAll(list)
+        items.addAll(newList)
         if (expandedCardStableKey != null && items.none { stableKeyFor(it) == expandedCardStableKey }) {
             expandedCardStableKey = null
             selectedActionIndex = 0
         }
-        notifyDataSetChanged()
+        if (oldList.isEmpty()) {
+            notifyDataSetChanged()
+            return
+        }
+        val diff =
+            DiffUtil.calculateDiff(
+                object : DiffUtil.Callback() {
+                    override fun getOldListSize(): Int = oldList.size
+
+                    override fun getNewListSize(): Int = newList.size
+
+                    override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean =
+                        stableKeyFor(oldList[oldPos]) == stableKeyFor(newList[newPos])
+
+                    override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
+                        oldList[oldPos] == newList[newPos]
+                },
+            )
+        diff.dispatchUpdatesTo(this)
     }
 
     fun append(list: List<VideoCard>) {

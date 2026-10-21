@@ -42,6 +42,21 @@
                 app:strokeWidth="2dp" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_block"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginTop="4dp"
+                android:stateListAnimator="@animator/blbl_focus_scale"
+                android:text="拉黑"
+                android:textAllCaps="false"
+                app:cornerRadius="20dp"
+                app:strokeColor="?attr/blblFocusStrokeColor"
+                app:strokeWidth="2dp"
+                app:layout_constraintEnd_toStartOf="@id/btn_follow"
+                app:layout_constraintTop_toTopOf="@id/iv_avatar" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_follow"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
@@ -67,7 +82,7 @@
                 android:textColor="?attr/blblOnPageBackdrop"
                 android:textSize="20sp"
                 android:textStyle="bold"
-                app:layout_constraintEnd_toStartOf="@id/btn_follow"
+                app:layout_constraintEnd_toStartOf="@id/btn_block"
                 app:layout_constraintStart_toEndOf="@id/iv_avatar"
                 app:layout_constraintTop_toTopOf="@id/iv_avatar" />
 
@@ -81,7 +96,7 @@
                 android:maxLines="1"
                 android:textColor="?attr/blblOnPageBackdropSecondary"
                 android:textSize="14sp"
-                app:layout_constraintEnd_toStartOf="@id/btn_follow"
+                app:layout_constraintEnd_toStartOf="@id/btn_block"
                 app:layout_constraintStart_toStartOf="@id/tv_name"
                 app:layout_constraintTop_toBottomOf="@id/tv_name" />
 
@@ -90,7 +105,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:barrierDirection="bottom"
-                app:constraint_referenced_ids="iv_avatar,btn_follow,tv_sign" />
+                app:constraint_referenced_ids="iv_avatar,btn_follow,btn_block,tv_sign" />
 
             <LinearLayout
                 android:id="@+id/ll_stats"
